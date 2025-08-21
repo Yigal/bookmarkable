@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarkable - Store Icon</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            width: 128px;
+            height: 128px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #4285f4 0%, #34a853 50%, #ea4335 100%);
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .icon-container {
+            width: 128px;
+            height: 128px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 
+                inset 0 2px 8px rgba(255,255,255,0.2),
+                inset 0 -2px 8px rgba(0,0,0,0.1),
+                0 4px 16px rgba(0,0,0,0.2);
+        }
+        
+        .letter {
+            color: white;
+            font-size: 64px;
+            font-weight: bold;
+            text-shadow: 
+                0 2px 4px rgba(0,0,0,0.3),
+                0 0 12px rgba(255,255,255,0.1);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .bookmark-accent {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 16px;
+            height: 20px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 2px;
+            transform: rotate(15deg);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        .bookmark-accent::before {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid rgba(255,255,255,0.9);
+        }
+        
+        .highlight {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            width: 32px;
+            height: 32px;
+            background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="icon-container">
+        <div class="highlight"></div>
+        <div class="letter">B</div>
+        <div class="bookmark-accent"></div>
+    </div>
+</body>
+</html>

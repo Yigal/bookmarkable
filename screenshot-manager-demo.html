@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarkable - Bookmark Manager</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px 40px;
+            border-bottom: 1px solid #dadce0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #202124;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: #4285f4;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .toolbar {
+            background: white;
+            padding: 16px 40px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-bottom: 1px solid #dadce0;
+        }
+        
+        .search-box {
+            flex: 1;
+            max-width: 400px;
+            padding: 10px 16px;
+            border: 1px solid #dadce0;
+            border-radius: 24px;
+            font-size: 14px;
+            background: #f8f9fa;
+        }
+        
+        .filter-button {
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            color: #5f6368;
+        }
+        
+        .filter-button.active {
+            background: #e8f0fe;
+            color: #1a73e8;
+            border-color: #4285f4;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        .bookmarks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+        
+        .bookmark-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s, transform 0.2s;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .bookmark-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+        
+        .bookmark-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .bookmark-image.productivity {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .bookmark-image.research {
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        }
+        
+        .bookmark-image.design {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+        
+        .bookmark-image.tech {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .bookmark-content {
+            padding: 20px;
+        }
+        
+        .bookmark-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #202124;
+            margin: 0 0 8px 0;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .bookmark-excerpt {
+            font-size: 14px;
+            color: #5f6368;
+            line-height: 1.4;
+            margin-bottom: 12px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        
+        .bookmark-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #5f6368;
+        }
+        
+        .bookmark-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            background: #e8f0fe;
+            color: #1a73e8;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: #34a853;
+        }
+        
+        .sync-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #34a853;
+        }
+        
+        .stats-bar {
+            background: white;
+            padding: 16px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #dadce0;
+        }
+        
+        .stats-text {
+            font-size: 14px;
+            color: #5f6368;
+        }
+        
+        .view-toggle {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .view-button {
+            padding: 6px 12px;
+            border: 1px solid #dadce0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #5f6368;
+        }
+        
+        .view-button.active {
+            background: #1a73e8;
+            color: white;
+            border-color: #1a73e8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <div class="logo">B</div>
+            Bookmarkable
+        </h1>
+    </div>
+    
+    <div class="toolbar">
+        <input type="text" class="search-box" placeholder="Search your bookmarks...">
+        <button class="filter-button active">All</button>
+        <button class="filter-button">Productivity</button>
+        <button class="filter-button">Research</button>
+        <button class="filter-button">Design</button>
+        <button class="filter-button">Tech</button>
+    </div>
+    
+    <div class="stats-bar">
+        <div class="stats-text">124 bookmarks saved • 98 synced • 26 offline</div>
+        <div class="view-toggle">
+            <button class="view-button active">Grid</button>
+            <button class="view-button">List</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="bookmarks-grid">
+            <!-- Bookmark 1 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image tech">Smart Bookmarking Technology</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">The Future of Smart Bookmark Management</h3>
+                    <p class="bookmark-excerpt">In today's digital age, we bookmark hundreds of articles, resources, and websites, but finding them later becomes increasingly difficult. Traditional bookmark managers fall short...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">productivity</span>
+                            <span class="tag">bookmarks</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot"></div>
+                            Synced
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookmark 2 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image productivity">Remote Work Productivity</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">10 Tips for Remote Work Productivity</h3>
+                    <p class="bookmark-excerpt">Working from home presents unique challenges. These proven strategies help maintain focus and efficiency while building sustainable work-life boundaries...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">remote work</span>
+                            <span class="tag">productivity</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot"></div>
+                            Synced
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookmark 3 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image design">Design Systems Guide</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">Building Scalable Design Systems</h3>
+                    <p class="bookmark-excerpt">A comprehensive guide to creating design systems that scale across teams and products. Learn about component libraries, design tokens, and documentation...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">design</span>
+                            <span class="tag">systems</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot"></div>
+                            Synced
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookmark 4 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image research">AI Research Papers</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">Latest Advances in Machine Learning</h3>
+                    <p class="bookmark-excerpt">Breakthrough research in neural networks, deep learning architectures, and AI applications. This comprehensive review covers the most significant developments...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">ai</span>
+                            <span class="tag">research</span>
+                            <span class="tag">ml</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot"></div>
+                            Synced
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookmark 5 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image productivity">JavaScript Best Practices</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">Modern JavaScript Development Best Practices</h3>
+                    <p class="bookmark-excerpt">Essential patterns, tools, and techniques for JavaScript developers in 2024. From ES6+ features to modern build tools and testing strategies...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">javascript</span>
+                            <span class="tag">development</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot"></div>
+                            Synced
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookmark 6 -->
+            <div class="bookmark-card">
+                <div class="bookmark-image tech">Sustainable Technology</div>
+                <div class="bookmark-content">
+                    <h3 class="bookmark-title">Green Technology and Sustainable Computing</h3>
+                    <p class="bookmark-excerpt">How technology companies are reducing their environmental impact through innovative approaches to energy efficiency, renewable resources, and sustainable practices...</p>
+                    <div class="bookmark-meta">
+                        <div class="bookmark-tags">
+                            <span class="tag">sustainability</span>
+                            <span class="tag">tech</span>
+                        </div>
+                        <div class="sync-status">
+                            <div class="sync-dot" style="background: #fbbc04;"></div>
+                            Pending
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add some interactivity for the demo
+        document.addEventListener('DOMContentLoaded', function() {
+            const cards = document.querySelectorAll('.bookmark-card');
+            const filterButtons = document.querySelectorAll('.filter-button');
+            
+            cards.forEach(card => {
+                card.addEventListener('click', function() {
+                    console.log('Bookmark clicked:', card.querySelector('.bookmark-title').textContent);
+                });
+            });
+            
+            filterButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    filterButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    console.log('Filter applied:', this.textContent);
+                });
+            });
+        });
+    </script>
+</body>
+</html>

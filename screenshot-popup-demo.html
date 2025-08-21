@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarkable Extension Popup</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f0f0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .browser-window {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            width: 1200px;
+            height: 700px;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .browser-header {
+            background: #f1f3f4;
+            padding: 12px 16px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #dadce0;
+        }
+        
+        .browser-dots {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .dot.red { background: #ff5f57; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #28ca42; }
+        
+        .address-bar {
+            flex: 1;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 20px;
+            padding: 8px 16px;
+            margin-left: 20px;
+            color: #5f6368;
+            font-size: 14px;
+        }
+        
+        .extension-icon {
+            width: 24px;
+            height: 24px;
+            background: #4285f4;
+            border-radius: 4px;
+            margin-left: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .browser-content {
+            flex: 1;
+            position: relative;
+            background: white;
+        }
+        
+        .demo-page {
+            padding: 40px;
+            height: 100%;
+            overflow: auto;
+        }
+        
+        .demo-article {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .demo-title {
+            font-size: 2.2em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #202124;
+        }
+        
+        .demo-content {
+            font-size: 1.1em;
+            line-height: 1.6;
+            color: #3c4043;
+            margin-bottom: 20px;
+        }
+        
+        /* Popup Styles */
+        .popup-overlay {
+            position: absolute;
+            top: 56px;
+            right: 20px;
+            width: 320px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            border: 1px solid #dadce0;
+            z-index: 1000;
+            animation: fadeIn 0.2s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .popup-header {
+            background: #4285f4;
+            color: white;
+            padding: 16px 20px;
+            border-radius: 8px 8px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .popup-icon {
+            width: 24px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .popup-title {
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .popup-content {
+            padding: 20px;
+        }
+        
+        .extracted-info {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        
+        .extracted-title {
+            font-weight: 600;
+            color: #202124;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .extracted-preview {
+            font-size: 13px;
+            color: #5f6368;
+            line-height: 1.4;
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-weight: 500;
+            color: #202124;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        
+        .form-input:focus {
+            outline: none;
+            border-color: #4285f4;
+            box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+        }
+        
+        .tag-input {
+            background: #f8f9fa;
+        }
+        
+        .save-button {
+            width: 100%;
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .save-button:hover {
+            background: #3367d6;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #5f6368;
+            margin-top: 12px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34a853;
+        }
+    </style>
+</head>
+<body>
+    <div class="browser-window">
+        <div class="browser-header">
+            <div class="browser-dots">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div class="address-bar">https://techblog.example.com/smart-bookmark-management</div>
+            <div class="extension-icon">B</div>
+        </div>
+        
+        <div class="browser-content">
+            <div class="demo-page">
+                <div class="demo-article">
+                    <h1 class="demo-title">The Future of Smart Bookmark Management</h1>
+                    <div class="demo-content">
+                        In today's digital age, we bookmark hundreds of articles, resources, and websites, but finding them later becomes increasingly difficult. Traditional bookmark managers fall short when it comes to organizing and retrieving content efficiently.
+                    </div>
+                    <div class="demo-content">
+                        Bookmarkable revolutionizes this experience by automatically extracting the main content and images from pages you save, creating rich, visual bookmark cards that help you instantly recognize and find what you're looking for.
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Extension Popup -->
+            <div class="popup-overlay">
+                <div class="popup-header">
+                    <div class="popup-icon">B</div>
+                    <div class="popup-title">Save Bookmark</div>
+                </div>
+                
+                <div class="popup-content">
+                    <div class="extracted-info">
+                        <div class="extracted-title">📄 Content Extracted</div>
+                        <div class="extracted-preview">
+                            "In today's digital age, we bookmark hundreds of articles, resources, and websites, but finding them later becomes increasingly difficult. Traditional bookmark managers fall short when it comes to organizing..."
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Title</label>
+                        <input class="form-input" type="text" value="The Future of Smart Bookmark Management">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Tags (optional)</label>
+                        <input class="form-input tag-input" type="text" placeholder="productivity, bookmarks, tools" value="productivity, bookmarks">
+                    </div>
+                    
+                    <button class="save-button">💾 Save Bookmark</button>
+                    
+                    <div class="status-indicator">
+                        <div class="status-dot"></div>
+                        <span>Ready to save offline & sync when available</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
