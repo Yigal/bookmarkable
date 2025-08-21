@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Bookmarks - Bookmark Sync</title>
+  <link rel="stylesheet" href="bookmarks.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-content">
+        <h1 class="title">
+          <img src="icons/icon32.png" alt="Bookmark Sync" class="logo">
+          My Bookmarks
+        </h1>
+        <div class="header-stats">
+          <div class="stat-item">
+            <span class="stat-number" id="total-count">0</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number" id="recent-count">0</span>
+            <span class="stat-label">This Week</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="controls">
+        <div class="search-container">
+          <input type="text" id="search-input" placeholder="Search bookmarks..." class="search-input">
+          <button id="search-btn" class="search-btn">🔍</button>
+        </div>
+        
+        <div class="filter-controls">
+          <select id="sort-select" class="control-select">
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="title">By Title</option>
+            <option value="url">By URL</option>
+          </select>
+          
+          <select id="filter-select" class="control-select">
+            <option value="all">All Bookmarks</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="bulk-save">Bulk Saved</option>
+          </select>
+          
+          <button id="refresh-btn" class="control-btn">Refresh</button>
+          <button id="export-btn" class="control-btn">Export</button>
+          <button id="clear-btn" class="control-btn clear-btn">Clear Bookmarks</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <div class="loading-state" id="loading-state">
+        <div class="spinner"></div>
+        <p>Loading your bookmarks...</p>
+      </div>
+
+      <div class="error-state" id="error-state" style="display: none;">
+        <div class="error-icon">⚠️</div>
+        <h3>Unable to load bookmarks</h3>
+        <p id="error-message">Please check your connection and try again.</p>
+        <button id="retry-btn" class="retry-btn">Try Again</button>
+      </div>
+
+      <div class="empty-state" id="empty-state" style="display: none;">
+        <div class="empty-icon">📚</div>
+        <h3>No bookmarks found</h3>
+        <p>Start saving bookmarks by clicking the extension icon or using the context menu.</p>
+      </div>
+
+      <div class="bookmarks-container" id="bookmarks-container">
+        <div class="tags-section" id="tags-section">
+          <h3>Filter by Tags</h3>
+          <div class="tags-list" id="tags-list">
+            <!-- Tags will be populated dynamically -->
+          </div>
+        </div>
+
+        <div class="bookmarks-grid" id="bookmarks-grid">
+          <!-- Bookmarks will be populated dynamically -->
+        </div>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <p>&copy; 2024 Bookmark Sync Extension</p>
+      <div class="footer-links">
+        <a href="#" id="clear-search">Clear Filters</a>
+        <a href="#" id="settings-link">Settings</a>
+        <a href="privacy-policy.md" target="_blank">Privacy Policy</a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="bookmarks.js"></script>
+</body>
+</html>

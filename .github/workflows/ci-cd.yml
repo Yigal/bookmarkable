@@ -1,0 +1,326 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Code Quality and Testing
+  quality-check:
+    runs-on: ubuntu-latest
+    name: Code Quality & Testing
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: webapp/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./webapp
+      run: npm ci
+      
+    - name: Lint code
+      working-directory: ./webapp
+      run: npm run lint
+      
+    - name: Check code formatting
+      working-directory: ./webapp
+      run: npm run format:check
+      
+    - name: Run unit tests
+      working-directory: ./webapp
+      run: npm run test:unit
+      
+    - name: Run integration tests
+      working-directory: ./webapp
+      run: npm run test:integration
+      
+    - name: Generate coverage report
+      working-directory: ./webapp
+      run: npm run test:coverage
+      
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./webapp/coverage/lcov.info
+        flags: webapp
+        name: webapp-coverage
+        
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Security Scanning
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scanning
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: './webapp'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+        
+    - name: Audit npm dependencies
+      working-directory: ./webapp
+      run: npm audit --audit-level=moderate
+
+  # Database Migration Testing
+  migration-test:
+    runs-on: ubuntu-latest
+    name: Database Migration Testing
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: webapp/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./webapp
+      run: npm ci
+      
+    - name: Test database migrations
+      working-directory: ./webapp
+      run: |
+        # Test migration up
+        npm run migrate:up
+        
+        # Test migration status
+        npm run migrate:status
+        
+        # Test migration rollback
+        npm run migrate:down -- --steps 1
+        
+        # Test migration up again
+        npm run migrate:up
+      env:
+        NODE_ENV: test
+        DB_PATH: ':memory:'
+
+  # Build and Package
+  build:
+    runs-on: ubuntu-latest
+    name: Build Application
+    needs: [quality-check, security-scan, migration-test]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: webapp/package-lock.json
+        
+    - name: Install dependencies
+      working-directory: ./webapp
+      run: npm ci --only=production
+      
+    - name: Create production build
+      working-directory: ./webapp
+      run: |
+        # Create build directory
+        mkdir -p dist
+        
+        # Copy production files
+        cp -r public dist/
+        cp -r routes dist/
+        cp -r config dist/
+        cp -r middleware dist/
+        cp -r scripts dist/
+        cp -r migrations dist/
+        cp server.js dist/
+        cp package.json dist/
+        cp package-lock.json dist/
+        
+        # Copy environment template
+        cp .env.example dist/.env.example
+        
+    - name: Package Chrome Extension
+      run: |
+        cd extension
+        zip -r ../webapp/dist/bookmark-sync-extension.zip . \
+          -x "*.md" "node_modules/*" ".git/*"
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: |
+          webapp/dist/
+          !webapp/dist/node_modules/
+        retention-days: 30
+
+  # Docker Build
+  docker-build:
+    runs-on: ubuntu-latest
+    name: Build Docker Image
+    needs: [build]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: build-artifacts
+        path: webapp/dist/
+        
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha
+          
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./webapp
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Staging Deployment
+  deploy-staging:
+    runs-on: ubuntu-latest
+    name: Deploy to Staging
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Deploy to staging
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment commands here
+        # Example: kubectl, terraform, etc.
+        
+    - name: Run smoke tests
+      run: |
+        echo "Running smoke tests..."
+        # Add smoke test commands here
+        # curl -f http://staging.yourdomain.com/api/health
+
+  # Production Deployment
+  deploy-production:
+    runs-on: ubuntu-latest
+    name: Deploy to Production
+    needs: [docker-build]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment commands here
+        
+    - name: Run health checks
+      run: |
+        echo "Running production health checks..."
+        # Add health check commands here
+
+  # Release Management
+  create-release:
+    runs-on: ubuntu-latest
+    name: Create Release
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Generate changelog
+      run: |
+        # Generate changelog from commits
+        git log --oneline --since="$(git describe --tags --abbrev=0 2>/dev/null || echo '1970-01-01')" > CHANGELOG.md
+        
+    - name: Create release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: false
+
+  # Notification
+  notify:
+    runs-on: ubuntu-latest
+    name: Notify Team
+    needs: [quality-check, security-scan, migration-test, build, docker-build]
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: ${{ success() }}
+      run: |
+        echo "✅ Pipeline completed successfully!"
+        # Add notification logic (Slack, Discord, etc.)
+        
+    - name: Notify on failure
+      if: ${{ failure() }}
+      run: |
+        echo "❌ Pipeline failed!"
+        # Add failure notification logic

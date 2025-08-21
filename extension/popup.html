@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmark Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">Bookmark Sync</h1>
+      <div class="status" id="status">Ready</div>
+    </header>
+
+    <section class="current-page">
+      <h2>Current Page</h2>
+      <div class="page-info" id="current-page-info">
+        <div class="page-title" id="page-title">Loading...</div>
+        <div class="page-url" id="page-url">Loading...</div>
+      </div>
+      <div class="actions">
+        <button id="save-bookmark" class="btn btn-primary" disabled>
+          Save Bookmark
+        </button>
+        <button id="save-with-tags" class="btn btn-secondary" disabled>
+          Save with Tags
+        </button>
+      </div>
+    </section>
+
+    <section class="tags-section" id="tags-section" style="display: none;">
+      <h3>Add Tags</h3>
+      <input type="text" id="tags-input" placeholder="Enter tags separated by commas" class="tags-input">
+      <div class="tag-actions">
+        <button id="confirm-save" class="btn btn-primary">Save</button>
+        <button id="cancel-tags" class="btn btn-secondary">Cancel</button>
+      </div>
+    </section>
+
+    <section class="recent-bookmarks">
+      <h2>Recent Bookmarks</h2>
+      <div class="bookmarks-list" id="bookmarks-list">
+        <div class="loading">Loading recent bookmarks...</div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <button id="view-all" class="btn btn-link">View All Bookmarks</button>
+      <button id="settings" class="btn btn-link">Settings</button>
+    </footer>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
