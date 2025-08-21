@@ -1,0 +1,16 @@
+# Xcode
+xcuserdata/
+build/
+DerivedData/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.ipa
+*.dSYM.zip
+*.dSYM
+.build/
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output

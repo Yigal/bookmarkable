@@ -6,13 +6,49 @@ const PopupState = {
 };
 
 // Pure functions for state management
-const createBookmarkData = (tab, tags = []) => ({
-  title: tab.title,
-  url: tab.url,
-  tags: Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim()).filter(t => t),
-  timestamp: new Date().toISOString(),
-  favicon: tab.favIconUrl
-});
+const createBookmarkData = async (tab, tags = []) => {
+  try {
+    // Get enhanced page metadata from content script
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageMetadata' });
+    
+    if (response && response.success) {
+      return {
+        title: tab.title,
+        url: tab.url,
+        tags: Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim()).filter(t => t),
+        timestamp: new Date().toISOString(),
+        favicon: tab.favIconUrl,
+        textContent: response.data.textContent || '',
+        primaryImage: response.data.primaryImage || null,
+        description: response.data.description || '',
+        keywords: response.data.keywords || [],
+        suggestedTags: response.data.suggestedTags || [],
+        author: response.data.author || null,
+        publishedDate: response.data.publishedDate || null,
+        siteName: response.data.siteName || null
+      };
+    }
+  } catch (error) {
+    console.warn('Could not extract enhanced metadata:', error);
+  }
+  
+  // Fallback to basic bookmark data
+  return {
+    title: tab.title,
+    url: tab.url,
+    tags: Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim()).filter(t => t),
+    timestamp: new Date().toISOString(),
+    favicon: tab.favIconUrl,
+    textContent: '',
+    primaryImage: null,
+    description: '',
+    keywords: [],
+    suggestedTags: [],
+    author: null,
+    publishedDate: null,
+    siteName: null
+  };
+};
 
 const updateStatus = (message, type = 'default') => {
   const statusElement = document.getElementById('status');
@@ -56,15 +92,28 @@ const renderBookmarksList = (bookmarks) => {
     return bookmarks;
   }
   
-  const bookmarksHtml = bookmarks.map(bookmark => `
-    <div class="bookmark-item">
-      <div class="bookmark-title">${bookmark.title}</div>
-      <div class="bookmark-url">${bookmark.url}</div>
-      <div class="bookmark-tags">
-        ${bookmark.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+  const bookmarksHtml = bookmarks.map(bookmark => {
+    const syncIndicator = bookmark.syncStatus === 'synced' 
+      ? '☁️' 
+      : bookmark.syncStatus === 'pending'
+      ? '⏳'
+      : '💾';
+    
+    const textPreview = bookmark.textContent 
+      ? `<div class="bookmark-preview">${bookmark.textContent.substring(0, 120)}${bookmark.textContent.length > 120 ? '...' : ''}</div>`
+      : '';
+    
+    return `
+      <div class="bookmark-item">
+        <div class="bookmark-title">${bookmark.title} <span class="sync-indicator">${syncIndicator}</span></div>
+        <div class="bookmark-url">${bookmark.url}</div>
+        ${textPreview}
+        <div class="bookmark-tags">
+          ${(bookmark.tags || []).map(tag => `<span class="tag">${tag}</span>`).join('')}
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
   
   listElement.innerHTML = bookmarksHtml;
   return bookmarks;
@@ -76,7 +125,37 @@ const enableButtons = (enabled) => {
   return enabled;
 };
 
-// API functions
+// Local storage functions
+const saveBookmarkLocally = async (bookmarkData) => {
+  try {
+    // Get existing bookmarks
+    const result = await chrome.storage.local.get(['bookmarks']);
+    let bookmarks = result.bookmarks || [];
+    
+    // Check if bookmark already exists
+    const exists = bookmarks.some(bookmark => bookmark.url === bookmarkData.url);
+    if (exists) {
+      throw new Error('Bookmark already exists');
+    }
+    
+    // Add ID and save
+    const bookmarkWithId = {
+      ...bookmarkData,
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+      syncStatus: 'pending' // Mark for sync when webapp is available
+    };
+    
+    bookmarks.unshift(bookmarkWithId); // Add to beginning
+    await chrome.storage.local.set({ bookmarks });
+    
+    return bookmarkWithId;
+  } catch (error) {
+    console.error('Error saving bookmark locally:', error);
+    throw error;
+  }
+};
+
+// API functions with fallback
 const saveBookmarkToServer = async (bookmarkData) => {
   try {
     const response = await fetch('http://localhost:3000/api/bookmarks', {
@@ -93,22 +172,85 @@ const saveBookmarkToServer = async (bookmarkData) => {
     
     return await response.json();
   } catch (error) {
-    console.error('Error saving bookmark:', error);
+    console.error('Error saving bookmark to server:', error);
     throw error;
+  }
+};
+
+const saveBookmarkWithFallback = async (bookmarkData) => {
+  try {
+    // Try server first
+    const serverResult = await saveBookmarkToServer(bookmarkData);
+    
+    // Also save locally for offline access
+    const localBookmark = {
+      ...bookmarkData,
+      id: serverResult.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
+      syncStatus: 'synced'
+    };
+    
+    const result = await chrome.storage.local.get(['bookmarks']);
+    let bookmarks = result.bookmarks || [];
+    
+    // Remove existing local copy if any
+    bookmarks = bookmarks.filter(b => b.url !== bookmarkData.url);
+    bookmarks.unshift(localBookmark);
+    
+    await chrome.storage.local.set({ bookmarks });
+    
+    return { success: true, source: 'server', data: serverResult };
+  } catch (error) {
+    console.warn('Server unavailable, saving locally:', error.message);
+    
+    // Fallback to local storage
+    try {
+      const localResult = await saveBookmarkLocally(bookmarkData);
+      return { success: true, source: 'local', data: localResult };
+    } catch (localError) {
+      throw localError;
+    }
   }
 };
 
 const fetchRecentBookmarks = async (limit = 5) => {
   try {
+    // Try server first
     const response = await fetch(`http://localhost:3000/api/bookmarks/recent?limit=${limit}`);
     
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+    if (response.ok) {
+      const serverBookmarks = await response.json();
+      
+      // Update local storage with server data
+      const result = await chrome.storage.local.get(['bookmarks']);
+      let localBookmarks = result.bookmarks || [];
+      
+      // Merge server bookmarks with local ones
+      serverBookmarks.forEach(serverBookmark => {
+        const existingIndex = localBookmarks.findIndex(b => b.url === serverBookmark.url);
+        if (existingIndex >= 0) {
+          localBookmarks[existingIndex] = { ...serverBookmark, syncStatus: 'synced' };
+        } else {
+          localBookmarks.unshift({ ...serverBookmark, syncStatus: 'synced' });
+        }
+      });
+      
+      await chrome.storage.local.set({ bookmarks: localBookmarks });
+      
+      return serverBookmarks;
     }
-    
-    return await response.json();
   } catch (error) {
-    console.error('Error fetching recent bookmarks:', error);
+    console.warn('Server unavailable, using local bookmarks:', error.message);
+  }
+  
+  // Fallback to local storage
+  try {
+    const result = await chrome.storage.local.get(['bookmarks']);
+    const bookmarks = result.bookmarks || [];
+    
+    // Return most recent bookmarks (already sorted by insertion order)
+    return bookmarks.slice(0, limit);
+  } catch (error) {
+    console.error('Error fetching local bookmarks:', error);
     return [];
   }
 };
@@ -118,10 +260,15 @@ const handleSaveBookmark = async (tab, tags = []) => {
   updateStatus('Saving bookmark...', 'loading');
   
   try {
-    const bookmarkData = createBookmarkData(tab, tags);
-    await saveBookmarkToServer(bookmarkData);
+    const bookmarkData = await createBookmarkData(tab, tags);
+    const result = await saveBookmarkWithFallback(bookmarkData);
     
-    updateStatus('Bookmark saved!', 'success');
+    if (result.source === 'server') {
+      updateStatus('Bookmark saved and synced!', 'success');
+    } else {
+      updateStatus('Bookmark saved locally!', 'success');
+    }
+    
     setTimeout(() => updateStatus('Ready'), 2000);
     
     // Refresh recent bookmarks
@@ -151,7 +298,19 @@ const handleCancelTags = () => {
 };
 
 const handleViewAll = () => {
-  chrome.tabs.create({ url: 'http://localhost:3000' });
+  // Try webapp first, fallback to local bookmarks manager
+  fetch('http://localhost:3000/api/bookmarks/recent?limit=1')
+    .then(response => {
+      if (response.ok) {
+        chrome.tabs.create({ url: 'http://localhost:3000' });
+      } else {
+        chrome.tabs.create({ url: chrome.runtime.getURL('bookmarks.html') });
+      }
+    })
+    .catch(() => {
+      chrome.tabs.create({ url: chrome.runtime.getURL('bookmarks.html') });
+    });
+  
   window.close();
 };
 

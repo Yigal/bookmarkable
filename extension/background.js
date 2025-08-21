@@ -21,6 +21,9 @@ const createBookmarkRecord = (tab, additionalData = {}) => {
     favicon: tab.favIconUrl || `https://www.google.com/s2/favicons?domain=${domain}`,
     timestamp: new Date().toISOString(),
     note: additionalData.note || '',
+    textContent: additionalData.textContent || '',
+    primaryImage: additionalData.primaryImage || null,
+    description: additionalData.description || '',
     ...additionalData
   };
 };
@@ -188,7 +191,8 @@ const saveBookmarkLocally = async (bookmarkData) => {
     const cleanBookmarkData = {
       ...bookmarkData,
       title: cleanTitle,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      syncStatus: bookmarkData.syncStatus || 'pending'
     };
     
     // Save to main bookmarks storage
@@ -198,6 +202,110 @@ const saveBookmarkLocally = async (bookmarkData) => {
   } catch (error) {
     console.error('Error saving bookmark locally:', error);
     return { success: false, error: error.message };
+  }
+};
+
+// Sync function to sync local bookmarks with webapp when available
+const syncPendingBookmarks = async () => {
+  try {
+    // Check if webapp is available
+    const response = await fetch('http://localhost:3000/api/bookmarks/recent?limit=1');
+    if (!response.ok) {
+      return { success: false, error: 'Webapp not available' };
+    }
+    
+    // Get local bookmarks that need syncing
+    const result = await getFromLocalStorage('bookmarks');
+    if (!result.success || !result.data) {
+      return { success: true, syncedCount: 0 };
+    }
+    
+    const bookmarks = Array.isArray(result.data) ? result.data : [result.data];
+    const pendingBookmarks = bookmarks.filter(b => b.syncStatus === 'pending');
+    
+    if (pendingBookmarks.length === 0) {
+      return { success: true, syncedCount: 0 };
+    }
+    
+    let syncedCount = 0;
+    const updatedBookmarks = [...bookmarks];
+    
+    // Sync each pending bookmark
+    for (const bookmark of pendingBookmarks) {
+      try {
+        const syncResponse = await fetch('http://localhost:3000/api/bookmarks', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(bookmark)
+        });
+        
+        if (syncResponse.ok) {
+          // Mark as synced
+          const bookmarkIndex = updatedBookmarks.findIndex(b => b.id === bookmark.id);
+          if (bookmarkIndex >= 0) {
+            updatedBookmarks[bookmarkIndex].syncStatus = 'synced';
+            syncedCount++;
+          }
+        }
+      } catch (error) {
+        console.error('Error syncing bookmark:', bookmark.url, error);
+      }
+    }
+    
+    // Update local storage with sync status
+    if (syncedCount > 0) {
+      await chrome.storage.local.set({ bookmarks: updatedBookmarks });
+    }
+    
+    return { success: true, syncedCount };
+  } catch (error) {
+    console.error('Error syncing bookmarks:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Enhanced save function with webapp sync attempt
+const saveBookmarkWithFallback = async (bookmarkData) => {
+  try {
+    // Try server first
+    const response = await fetch('http://localhost:3000/api/bookmarks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bookmarkData)
+    });
+    
+    if (response.ok) {
+      const serverResult = await response.json();
+      
+      // Also save locally with synced status
+      const localBookmark = {
+        ...bookmarkData,
+        id: serverResult.id || Date.now().toString(36) + Math.random().toString(36).substr(2),
+        syncStatus: 'synced'
+      };
+      
+      const result = await saveBookmarkLocally(localBookmark);
+      return { success: true, source: 'server', data: serverResult };
+    }
+  } catch (error) {
+    console.warn('Server unavailable, saving locally:', error.message);
+  }
+  
+  // Fallback to local storage with pending sync status
+  const localBookmark = {
+    ...bookmarkData,
+    syncStatus: 'pending'
+  };
+  
+  const result = await saveBookmarkLocally(localBookmark);
+  if (result.success) {
+    return { success: true, source: 'local', data: result.data };
+  } else {
+    throw new Error(result.error);
   }
 };
 
@@ -802,7 +910,17 @@ chrome.commands.onCommand.addListener(async (command) => {
         break;
         
       case 'open-bookmarks':
-        await chrome.tabs.create({ url: 'http://localhost:3000' });
+        // Try webapp first, fallback to local bookmarks manager
+        try {
+          const response = await fetch('http://localhost:3000/api/bookmarks/recent?limit=1');
+          if (response.ok) {
+            await chrome.tabs.create({ url: 'http://localhost:3000' });
+          } else {
+            await chrome.tabs.create({ url: chrome.runtime.getURL('bookmarks.html') });
+          }
+        } catch (error) {
+          await chrome.tabs.create({ url: chrome.runtime.getURL('bookmarks.html') });
+        }
         break;
     }
   } catch (error) {
@@ -858,6 +976,19 @@ chrome.runtime.onStartup.addListener(async () => {
   // Create context menu items (ensure they exist)
   createContextMenus();
   
+  // Setup periodic sync alarm
+  chrome.alarms.create('syncBookmarks', { periodInMinutes: 5 });
+  
+  // Try initial sync
+  try {
+    const syncResult = await syncPendingBookmarks();
+    if (syncResult.success && syncResult.syncedCount > 0) {
+      console.log(`Synced ${syncResult.syncedCount} pending bookmarks on startup`);
+    }
+  } catch (error) {
+    console.error('Error during initial sync:', error);
+  }
+  
   // Update icons for all open tabs with cached data
   try {
     const tabs = await chrome.tabs.query({});
@@ -868,6 +999,28 @@ chrome.runtime.onStartup.addListener(async () => {
     }
   } catch (error) {
     console.error('Error updating icons on startup:', error);
+  }
+});
+
+// Handle periodic sync
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'syncBookmarks') {
+    try {
+      const syncResult = await syncPendingBookmarks();
+      if (syncResult.success && syncResult.syncedCount > 0) {
+        console.log(`Background sync: synced ${syncResult.syncedCount} bookmarks`);
+        
+        // Update icons for all tabs to reflect sync status
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url && !tab.url.startsWith('chrome://')) {
+            await updateIconForTab(tab.id, tab.url);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error during background sync:', error);
+    }
   }
 });
 
@@ -913,7 +1066,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
       case 'saveBookmark':
         const bookmarkData = createBookmarkRecord(request.tab, request.data);
-        const result = await saveBookmarkLocally(bookmarkData);
+        const result = await saveBookmarkWithFallback(bookmarkData);
         return result;
         
       case 'getRecentBookmarks':

@@ -100,7 +100,7 @@ const extractPageMetadata = () => {
   }
 };
 
-const extractTextContent = (maxLength = 500) => {
+const extractTextContent = (maxLength = 800) => {
   try {
     // Get main content, avoiding navigation and footer elements
     const contentSelectors = [
@@ -110,15 +110,22 @@ const extractTextContent = (maxLength = 500) => {
       '.main-content',
       '.post-content',
       '.entry-content',
-      '#content'
+      '.article-content',
+      '.story-content',
+      '.blog-content',
+      '#content',
+      '[role="main"]'
     ];
     
     let content = '';
+    let contentElement = null;
     
+    // Try to find the main content element
     for (const selector of contentSelectors) {
       try {
         const element = document.querySelector(selector);
         if (element) {
+          contentElement = element;
           content = element.textContent || element.innerText || '';
           break;
         }
@@ -128,7 +135,28 @@ const extractTextContent = (maxLength = 500) => {
       }
     }
     
-    // Fallback to body content if no main content found
+    // Fallback: try to find the largest text block
+    if (!content || content.length < 100) {
+      try {
+        const textElements = Array.from(document.querySelectorAll('p, div, section'))
+          .filter(el => {
+            const text = el.textContent || '';
+            // Filter out navigation, sidebar, and footer content
+            const parentClasses = el.parentElement ? el.parentElement.className.toLowerCase() : '';
+            const isNavigation = /nav|menu|sidebar|footer|header|ads?|social|share|comment/.test(parentClasses + ' ' + el.className.toLowerCase());
+            return text.length > 50 && !isNavigation;
+          })
+          .sort((a, b) => (b.textContent || '').length - (a.textContent || '').length);
+        
+        if (textElements.length > 0) {
+          content = textElements[0].textContent || '';
+        }
+      } catch (error) {
+        console.log('Fallback text extraction error:', error);
+      }
+    }
+    
+    // Final fallback to body content if no main content found
     if (!content) {
       try {
         content = document.body.textContent || document.body.innerText || '';
@@ -142,8 +170,10 @@ const extractTextContent = (maxLength = 500) => {
     try {
       return content
         .replace(/\s+/g, ' ')
+        .replace(/[\r\n\t]/g, ' ')
         .trim()
-        .substring(0, maxLength);
+        .substring(0, maxLength)
+        + (content.length > maxLength ? '...' : '');
     } catch (error) {
       console.log('Content cleaning error:', error);
       return content || '';
@@ -152,6 +182,161 @@ const extractTextContent = (maxLength = 500) => {
   } catch (error) {
     console.log('Text content extraction error:', error);
     return '';
+  }
+};
+
+// New function to extract the primary image from the page
+const extractPrimaryImage = () => {
+  try {
+    // Try different methods to find the main image
+    const imageSelectors = [
+      // Open Graph and Twitter images (highest priority)
+      'meta[property="og:image"]',
+      'meta[name="twitter:image"]',
+      // Main content images
+      'main img',
+      'article img',
+      '.content img:first-of-type',
+      '.main-content img:first-of-type',
+      '.post-content img:first-of-type',
+      '.entry-content img:first-of-type',
+      '.article-content img:first-of-type',
+      // Hero images
+      '.hero img',
+      '.banner img',
+      '.featured-image img',
+      '.post-thumbnail img',
+      // General fallback
+      'img[src*="featured"]',
+      'img[src*="hero"]',
+      'img[src*="banner"]'
+    ];
+    
+    for (const selector of imageSelectors) {
+      try {
+        if (selector.startsWith('meta')) {
+          // Handle meta tags
+          const meta = document.querySelector(selector);
+          if (meta) {
+            const imageUrl = meta.getAttribute('content');
+            if (imageUrl && isValidImageUrl(imageUrl)) {
+              return makeAbsoluteUrl(imageUrl);
+            }
+          }
+        } else {
+          // Handle img elements
+          const img = document.querySelector(selector);
+          if (img && img.src && isValidImageUrl(img.src)) {
+            // Check if image is reasonably sized (not tiny icons)
+            if (img.naturalWidth >= 200 && img.naturalHeight >= 100) {
+              return img.src;
+            }
+            // If natural dimensions aren't available, try CSS dimensions
+            const computedStyle = window.getComputedStyle(img);
+            const width = parseInt(computedStyle.width) || 0;
+            const height = parseInt(computedStyle.height) || 0;
+            if (width >= 200 && height >= 100) {
+              return img.src;
+            }
+          }
+        }
+      } catch (error) {
+        console.log(`Image selector error for ${selector}:`, error);
+        continue;
+      }
+    }
+    
+    // Final fallback: find the largest image on the page
+    try {
+      const allImages = Array.from(document.querySelectorAll('img'))
+        .filter(img => {
+          if (!img.src || !isValidImageUrl(img.src)) return false;
+          
+          // Filter out small images (likely icons or ads)
+          const width = img.naturalWidth || parseInt(window.getComputedStyle(img).width) || 0;
+          const height = img.naturalHeight || parseInt(window.getComputedStyle(img).height) || 0;
+          
+          // Skip very small images
+          if (width < 100 || height < 100) return false;
+          
+          // Skip images that look like ads or social icons
+          const src = img.src.toLowerCase();
+          const isAd = /\b(ad|banner|sponsor|promo)\b/.test(src);
+          const isSocial = /\b(facebook|twitter|instagram|linkedin|youtube|social)\b/.test(src);
+          
+          return !isAd && !isSocial;
+        })
+        .sort((a, b) => {
+          const aSize = (a.naturalWidth || 0) * (a.naturalHeight || 0);
+          const bSize = (b.naturalWidth || 0) * (b.naturalHeight || 0);
+          return bSize - aSize; // Sort by size, largest first
+        });
+      
+      if (allImages.length > 0) {
+        return allImages[0].src;
+      }
+    } catch (error) {
+      console.log('Fallback image extraction error:', error);
+    }
+    
+    return null;
+  } catch (error) {
+    console.log('Primary image extraction error:', error);
+    return null;
+  }
+};
+
+// Helper function to validate image URLs
+const isValidImageUrl = (url) => {
+  try {
+    if (!url || typeof url !== 'string') return false;
+    
+    // Check for valid image extensions
+    const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp)($|\?)/i;
+    const hasImageExtension = imageExtensions.test(url);
+    
+    // Check for data URLs (base64 images)
+    const isDataUrl = url.startsWith('data:image/');
+    
+    // Check for valid HTTP/HTTPS URLs
+    const isHttpUrl = url.startsWith('http://') || url.startsWith('https://') || url.startsWith('//');
+    
+    // Check for relative URLs
+    const isRelativeUrl = url.startsWith('/') && !url.startsWith('//');
+    
+    return (hasImageExtension || isDataUrl) && (isHttpUrl || isRelativeUrl);
+  } catch (error) {
+    console.log('Image URL validation error:', error);
+    return false;
+  }
+};
+
+// Helper function to make URLs absolute
+const makeAbsoluteUrl = (url) => {
+  try {
+    if (!url) return url;
+    
+    // Already absolute
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // Protocol-relative
+    if (url.startsWith('//')) {
+      return window.location.protocol + url;
+    }
+    
+    // Root-relative
+    if (url.startsWith('/')) {
+      return window.location.origin + url;
+    }
+    
+    // Relative to current path
+    const base = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+    return base + url;
+  } catch (error) {
+    console.log('URL absolute conversion error:', error);
+    return url;
   }
 };
 
@@ -195,12 +380,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           
           const metadata = extractPageMetadata();
           const textContent = extractTextContent();
+          const primaryImage = extractPrimaryImage();
           
           return {
             success: true,
             data: {
               ...metadata,
               textContent,
+              primaryImage,
               capturedAt: new Date().toISOString()
             }
           };

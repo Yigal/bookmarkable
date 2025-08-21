@@ -119,8 +119,15 @@ const applyFilters = (bookmarks, state) => {
   return sortBookmarks(filtered, state.currentSort);
 };
 
-// Local storage functions
+// Local storage functions with sync capability
 const fetchBookmarksFromStorage = async () => {
+  try {
+    // Try to sync with webapp first
+    await attemptWebappSync();
+  } catch (error) {
+    console.warn('Webapp sync failed, using local data:', error.message);
+  }
+  
   return new Promise((resolve) => {
     chrome.storage.local.get(['bookmarks'], (result) => {
       console.log('Local storage result:', result);
@@ -132,6 +139,53 @@ const fetchBookmarksFromStorage = async () => {
   });
 };
 
+// Attempt to sync with webapp and update local data
+const attemptWebappSync = async () => {
+  try {
+    const response = await fetch('http://localhost:3000/api/bookmarks/recent?limit=100');
+    if (response.ok) {
+      const serverBookmarks = await response.json();
+      
+      // Get local bookmarks
+      const result = await new Promise((resolve) => {
+        chrome.storage.local.get(['bookmarks'], resolve);
+      });
+      
+      let localBookmarks = result.bookmarks || [];
+      let hasChanges = false;
+      
+      // Merge server bookmarks with local ones
+      serverBookmarks.forEach(serverBookmark => {
+        const existingIndex = localBookmarks.findIndex(b => b.url === serverBookmark.url);
+        if (existingIndex >= 0) {
+          // Update existing bookmark if it's different
+          if (localBookmarks[existingIndex].syncStatus !== 'synced') {
+            localBookmarks[existingIndex] = { ...serverBookmark, syncStatus: 'synced' };
+            hasChanges = true;
+          }
+        } else {
+          // Add new bookmark from server
+          localBookmarks.unshift({ ...serverBookmark, syncStatus: 'synced' });
+          hasChanges = true;
+        }
+      });
+      
+      // Save updated bookmarks if changes were made
+      if (hasChanges) {
+        await chrome.storage.local.set({ bookmarks: localBookmarks });
+        console.log('Synced bookmarks with webapp');
+      }
+      
+      return { success: true, synced: true };
+    } else {
+      throw new Error('Webapp not available');
+    }
+  } catch (error) {
+    console.warn('Could not sync with webapp:', error.message);
+    return { success: true, synced: false };
+  }
+};
+
 // UI rendering functions
 const createBookmarkCard = (bookmark) => {
   const card = document.createElement('div');
@@ -141,20 +195,39 @@ const createBookmarkCard = (bookmark) => {
   const formattedDate = formatDate(bookmark.timestamp);
   const tags = bookmark.tags || [];
   const note = bookmark.note || '';
+  const textContent = bookmark.textContent || '';
+  const primaryImage = bookmark.primaryImage;
   
   // Extract domain from URL if not already present
   const domain = bookmark.domain || (bookmark.url ? new URL(bookmark.url).hostname : '');
+  
+  // Create image section if we have a primary image
+  const imageSection = primaryImage ? `
+    <div class="bookmark-image">
+      <img src="${primaryImage}" alt="Page preview" loading="lazy" 
+           onerror="this.parentElement.style.display='none'">
+    </div>
+  ` : '';
+  
+  // Create text preview section
+  const textPreview = textContent ? `
+    <div class="bookmark-text-preview">
+      <p>${textContent.length > 300 ? textContent.substring(0, 300) + '...' : textContent}</p>
+    </div>
+  ` : '';
   
   card.innerHTML = `
     <div class="bookmark-header">
       <img src="${favicon}" alt="Favicon" class="bookmark-favicon" 
            onerror="this.outerHTML='<div class=\\"bookmark-favicon placeholder\\">${getFirstLetter(bookmark.title)}</div>'">
       <div class="bookmark-info">
-        <h3 class="bookmark-title" title="${bookmark.title}">${bookmark.title}</h3>
+        <h3 class="bookmark-title" title="${bookmark.title}">${bookmark.title} ${bookmark.syncStatus === 'synced' ? '☁️' : bookmark.syncStatus === 'pending' ? '⏳' : '💾'}</h3>
         <p class="bookmark-domain">${domain}</p>
         <p class="bookmark-url" title="${bookmark.url}">${bookmark.url}</p>
       </div>
     </div>
+    ${imageSection}
+    ${textPreview}
     ${note ? `<div class="bookmark-note" title="${note}">${note}</div>` : ''}
     <div class="bookmark-date">${formattedDate}</div>
     ${tags.length > 0 ? `
