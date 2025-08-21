@@ -729,7 +729,7 @@ const createContextMenus = () => {
     // Create context menu items for page context
     chrome.contextMenus.create({
       id: 'saveBookmark',
-      title: 'Save to Bookmark Sync',
+      title: 'Save to Bookmarkable',
       contexts: ['page', 'link']
     }, () => {
       if (chrome.runtime.lastError) {
@@ -741,7 +741,7 @@ const createContextMenus = () => {
     
     chrome.contextMenus.create({
       id: 'saveAllTabs',
-      title: 'Save All Tabs to Bookmark Sync',
+      title: 'Save All Tabs to Bookmarkable',
       contexts: ['page']
     }, () => {
       if (chrome.runtime.lastError) {
@@ -872,7 +872,7 @@ const createContextMenus = () => {
 
 // Extension lifecycle events
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Bookmark Sync extension installed:', details.reason);
+  console.log('Bookmarkable extension installed:', details.reason);
   
   if (details.reason === 'install') {
     // Set default settings
@@ -968,7 +968,7 @@ const handleSaveWithTags = async (tab) => {
 };
 
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('Bookmark Sync extension started');
+  console.log('Bookmarkable extension started');
   
   // Initialize icon cache first for maximum speed
   await initializeIconCache();
@@ -1218,7 +1218,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon48.png',
-        title: 'Bookmark Sync',
+        title: 'Bookmarkable',
         message: result.success ? 'Bookmark saved!' : 'Failed to save bookmark'
       });
     }
@@ -1232,7 +1232,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon48.png',
-        title: 'Bookmark Sync',
+        title: 'Bookmarkable',
         message: 'Saving all tabs... This may take a moment.'
       });
     }
@@ -1249,7 +1249,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon48.png',
-        title: 'Bookmark Sync - Bulk Save Complete',
+        title: 'Bookmarkable - Bulk Save Complete',
         message: message
       });
     }
@@ -1279,7 +1279,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           chrome.notifications.create({
             type: 'basic',
             iconUrl: 'icons/icon48.png',
-            title: 'Bookmark Sync',
+            title: 'Bookmarkable',
             message: result.success ? 'Bookmark saved!' : 'Failed to save bookmark'
           });
         }
@@ -1301,7 +1301,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'icons/icon48.png',
-        title: 'Bookmark Sync - Bulk Save Complete',
+        title: 'Bookmarkable - Bulk Save Complete',
         message: message
       });
     }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Bookmark Sync",
-  "version": "1.1.0",
+  "name": "Bookmarkable",
+  "version": "1.2.0",
   "description": "Save and organize your bookmarks locally with optional cloud sync",
   "permissions": [
     "bookmarks",

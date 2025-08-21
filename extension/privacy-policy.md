@@ -1,10 +1,10 @@
-# Privacy Policy for Bookmark Sync Chrome Extension
+# Privacy Policy for Bookmarkable Chrome Extension
 
 **Last updated**: December 2024
 
 ## Overview
 
-Bookmark Sync is a Chrome extension that helps you save and organize bookmarks by syncing them to a web application. This privacy policy explains what information we collect, how we use it, and your rights regarding your data.
+Bookmarkable is a Chrome extension that helps you save and organize bookmarks by syncing them to a web application. This privacy policy explains what information we collect, how we use it, and your rights regarding your data.
 
 ## Information We Collect
 
@@ -142,4 +142,4 @@ To exercise these rights, please contact us using the information provided above
 
 ---
 
-By using Bookmark Sync, you acknowledge that you have read and understood this privacy policy.
+By using Bookmarkable, you acknowledge that you have read and understood this privacy policy.
