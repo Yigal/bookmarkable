@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmarkable Chrome Extension</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        .description {
+            font-size: 1.2em;
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        .links {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .link-card {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #2c3e50;
+            transition: background-color 0.3s;
+            min-width: 150px;
+        }
+        .link-card:hover {
+            background: #d5dbdb;
+        }
+        .link-card h3 {
+            margin: 0 0 10px 0;
+            color: #3498db;
+        }
+        .link-card p {
+            margin: 0;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔖 Bookmarkable</h1>
+        <p class="description">Smart bookmarking with visual previews and intelligent content extraction</p>
+        
+        <div class="links">
+            <a href="https://github.com/Yigal/bookmarkable" class="link-card" target="_blank">
+                <h3>📦 Source Code</h3>
+                <p>View on GitHub</p>
+            </a>
+            
+            <a href="privacy-policy.html" class="link-card">
+                <h3>🔒 Privacy Policy</h3>
+                <p>Data protection info</p>
+            </a>
+            
+            <a href="https://chrome.google.com/webstore" class="link-card" target="_blank">
+                <h3>⬇️ Install Extension</h3>
+                <p>Chrome Web Store</p>
+            </a>
+        </div>
+        
+        <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #ecf0f1; color: #7f8c8d;">
+            <p>Open source bookmark management extension for Chrome</p>
+        </div>
+    </div>
+</body>
+</html>
