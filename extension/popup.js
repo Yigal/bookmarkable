@@ -135,7 +135,9 @@ const saveBookmarkLocally = async (bookmarkData) => {
     // Check if bookmark already exists
     const exists = bookmarks.some(bookmark => bookmark.url === bookmarkData.url);
     if (exists) {
-      throw new Error('Bookmark already exists');
+      // Find the existing bookmark to get its title
+      const existingBookmark = bookmarks.find(bookmark => bookmark.url === bookmarkData.url);
+      throw new Error(`Bookmark already exists: "${existingBookmark.title}"`); 
     }
     
     // Add ID and save
@@ -207,6 +209,42 @@ const saveBookmarkWithFallback = async (bookmarkData) => {
       const localResult = await saveBookmarkLocally(bookmarkData);
       return { success: true, source: 'local', data: localResult };
     } catch (localError) {
+      // Handle duplicate bookmark error specially
+      if (localError.message.includes('already exists')) {
+        const existingTitle = localError.message.match(/"([^"]+)"/)?.[1] || 'Unknown';
+        
+        // Show option to add note instead
+        const addNote = confirm(
+          `This page is already bookmarked as "${existingTitle}". \n\n` +
+          'Would you like to add a note to the existing bookmark?'
+        );
+        
+        if (addNote) {
+          const note = prompt('Add a note to this bookmark:');
+          if (note !== null) { // User didn't cancel
+            // Send message to background script to add note
+            const response = await chrome.runtime.sendMessage({
+              action: 'addNoteToBookmark',
+              url: bookmarkData.url,
+              note: note.trim()
+            });
+            
+            if (response.success) {
+              return { 
+                ...response.bookmark, 
+                message: response.message,
+                noteAdded: true,
+                success: true
+              };
+            } else {
+              throw new Error('Failed to add note: ' + response.error);
+            }
+          }
+        }
+        
+        throw new Error('Bookmark already exists');
+      }
+      
       throw localError;
     }
   }
@@ -263,7 +301,9 @@ const handleSaveBookmark = async (tab, tags = []) => {
     const bookmarkData = await createBookmarkData(tab, tags);
     const result = await saveBookmarkWithFallback(bookmarkData);
     
-    if (result.source === 'server') {
+    if (result.noteAdded) {
+      updateStatus('Note added to existing bookmark!', 'success');
+    } else if (result.source === 'server') {
       updateStatus('Bookmark saved and synced!', 'success');
     } else {
       updateStatus('Bookmark saved locally!', 'success');
@@ -276,7 +316,11 @@ const handleSaveBookmark = async (tab, tags = []) => {
     renderBookmarksList(recentBookmarks);
     
   } catch (error) {
-    updateStatus('Error saving bookmark', 'error');
+    if (error.message.includes('already exists')) {
+      updateStatus('Bookmark already exists', 'error');
+    } else {
+      updateStatus('Error saving bookmark', 'error');
+    }
     setTimeout(() => updateStatus('Ready'), 3000);
   }
 };

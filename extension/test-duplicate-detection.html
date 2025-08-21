@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmark Duplicate Detection Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-case { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .error { background: #f8d7da; border-color: #f5c6cb; }
+        .info { background: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .save-btn { background: #28a745; color: white; }
+        .check-btn { background: #007bff; color: white; }
+        .result { margin-top: 10px; padding: 10px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>📚 Bookmark Duplicate Detection & Note Adding Test</h1>
+    
+    <div class="test-case info">
+        <h3>New Features Test</h3>
+        <p>This page tests the new duplicate bookmark detection and note-adding functionality:</p>
+        <ul>
+            <li>✅ Extension icon shows different states for bookmarked vs unbookmarked pages</li>
+            <li>✅ Clicking on an already bookmarked page shows note input instead of saving duplicate</li>
+            <li>✅ Badge indicator (✓) shows when a page is already bookmarked</li>
+            <li>✅ Popup interface handles duplicates gracefully with note-adding option</li>
+        </ul>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 1: Check Current Page Bookmark Status</h3>
+        <p>URL: <code id="current-url"></code></p>
+        <button class="check-btn" onclick="checkBookmarkStatus()">Check if Bookmarked</button>
+        <div id="status-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 2: Save Current Page</h3>
+        <p>Try saving this page using the extension. If it's already saved, you should see a note input popup.</p>
+        <button class="save-btn" onclick="saveCurrentPage()">Save via Extension API</button>
+        <div id="save-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Test 3: Add Note to Existing Bookmark</h3>
+        <input type="text" id="note-input" placeholder="Enter a note to add..." style="width: 300px; padding: 5px;">
+        <button class="save-btn" onclick="addNote()">Add Note</button>
+        <div id="note-result" class="result" style="display: none;"></div>
+    </div>
+
+    <div class="test-case">
+        <h3>Extension Icon Tests</h3>
+        <ol>
+            <li>Look at the extension icon in the toolbar</li>
+            <li>If this page is NOT bookmarked: Icon should be normal</li>
+            <li>If this page IS bookmarked: Icon should show the "saved" state with green checkmark badge</li>
+            <li>Click the icon to test the behavior:
+                <ul>
+                    <li>New page: Should show note input popup</li>
+                    <li>Existing bookmark: Should show "add note to existing bookmark" popup</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <script>
+        // Display current URL
+        document.getElementById('current-url').textContent = window.location.href;
+
+        async function checkBookmarkStatus() {
+            const resultDiv = document.getElementById('status-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                // This would normally use chrome.runtime.sendMessage in the extension context
+                resultDiv.innerHTML = `
+                    <strong>Status Check:</strong><br>
+                    URL: ${window.location.href}<br>
+                    <em>Note: Full functionality requires Chrome extension context</em><br>
+                    <span style="color: #666;">In extension context, this would check chrome.storage.local for existing bookmarks</span>
+                `;
+                resultDiv.className = 'result info';
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function saveCurrentPage() {
+            const resultDiv = document.getElementById('save-result');
+            resultDiv.style.display = 'block';
+            
+            try {
+                resultDiv.innerHTML = `
+                    <strong>Save Test:</strong><br>
+                    Page: ${document.title}<br>
+                    URL: ${window.location.href}<br>
+                    <em>Note: Use the actual extension icon or popup to test full functionality</em><br>
+                    <span style="color: #666;">Expected behavior: If duplicate, should prompt for note instead of saving again</span>
+                `;
+                resultDiv.className = 'result info';
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        async function addNote() {
+            const noteInput = document.getElementById('note-input');
+            const resultDiv = document.getElementById('note-result');
+            const note = noteInput.value.trim();
+            
+            resultDiv.style.display = 'block';
+            
+            if (!note) {
+                resultDiv.innerHTML = '<strong>Error:</strong> Please enter a note';
+                resultDiv.className = 'result error';
+                return;
+            }
+            
+            try {
+                resultDiv.innerHTML = `
+                    <strong>Note Add Test:</strong><br>
+                    Note: "${note}"<br>
+                    URL: ${window.location.href}<br>
+                    <em>Note: Use the extension to test actual note adding functionality</em><br>
+                    <span style="color: #666;">Expected: Note should be added to existing bookmark entry</span>
+                `;
+                resultDiv.className = 'result info';
+                noteInput.value = '';
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>Error:</strong> ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+
+        // Show tips based on extension context
+        if (typeof chrome !== 'undefined' && chrome.runtime) {
+            document.body.insertAdjacentHTML('beforeend', `
+                <div class="test-case success">
+                    <h3>✅ Extension Context Detected</h3>
+                    <p>Chrome extension APIs are available. You can test full functionality!</p>
+                </div>
+            `);
+        } else {
+            document.body.insertAdjacentHTML('beforeend', `
+                <div class="test-case info">
+                    <h3>ℹ️ Web Page Context</h3>
+                    <p>Load this page in Chrome with the extension installed for full testing.</p>
+                </div>
+            `);
+        }
+    </script>
+</body>
+</html>

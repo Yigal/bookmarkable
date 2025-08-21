@@ -85,6 +85,7 @@ const checkIfBookmarkExists = async (url) => {
 
 // Pre-load and cache icon data for instant updates
 let cachedNormalIconPath = null;
+let cachedSavedIconPath = null;
 
 const initializeIconCache = async () => {
   try {
@@ -94,6 +95,14 @@ const initializeIconCache = async () => {
       "32": "icons/icon32.png", 
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
+    };
+    
+    // Cache saved icon path
+    cachedSavedIconPath = {
+      "16": "icons/icon16-saved.png",
+      "32": "icons/icon32-saved.png", 
+      "48": "icons/icon48-saved.png",
+      "128": "icons/icon128-saved.png"
     };
     
     console.log('Icon cache initialized successfully');
@@ -115,17 +124,21 @@ const updateIconForTab = async (tabId, url) => {
   const checkResult = await checkIfBookmarkExists(url);
   
   try {
-    // Always use cached normal icon path for instant updates
-    if (cachedNormalIconPath) {
+    // Use appropriate icon based on bookmark status
+    const iconPath = checkResult.exists && cachedSavedIconPath 
+      ? cachedSavedIconPath 
+      : cachedNormalIconPath;
+    
+    if (iconPath) {
       await chrome.action.setIcon({
         tabId: tabId,
-        path: cachedNormalIconPath
+        path: iconPath
       });
     }
     
-    // Update the title instantly to show bookmark status
+    // Update the title to show bookmark status
     const title = checkResult.exists 
-      ? `✓ ${checkResult.title || 'Page already bookmarked'}` 
+      ? `✓ Already bookmarked: ${checkResult.title || 'Page'} - Click to add note` 
       : "Save Bookmark";
       
     await chrome.action.setTitle({
@@ -154,7 +167,7 @@ const updateIconForTab = async (tabId, url) => {
     // Fallback to just updating title
     try {
       const fallbackTitle = checkResult.exists 
-        ? "✓ Page already bookmarked" 
+        ? "✓ Page already bookmarked - Click to add note" 
         : "Save Bookmark";
         
       await chrome.action.setTitle({
@@ -262,6 +275,202 @@ const syncPendingBookmarks = async () => {
     return { success: true, syncedCount };
   } catch (error) {
     console.error('Error syncing bookmarks:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Function to inject into page for note input (existing bookmarks)
+function showNoteInputForExistingBookmark(bookmarkTitle) {
+  // Remove existing popup if any
+  const existingPopup = document.getElementById('bookmark-note-popup-existing');
+  if (existingPopup) {
+    existingPopup.remove();
+  }
+  
+  // Create popup HTML
+  const popupHTML = `
+    <div id="bookmark-note-popup-existing" style="
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 350px;
+      background: white;
+      border: 2px solid #4CAF50;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      z-index: 10000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 0;
+      overflow: hidden;
+    ">
+      <div style="
+        background: #4CAF50;
+        color: white;
+        padding: 12px 16px;
+        font-weight: 600;
+        font-size: 14px;
+      ">
+        ✓ Bookmark Already Saved
+      </div>
+      <div style="padding: 16px;">
+        <div style="
+          font-size: 13px;
+          color: #666;
+          margin-bottom: 12px;
+          line-height: 1.4;
+        ">
+          "${bookmarkTitle}" is already in your bookmarks.
+        </div>
+        <label style="
+          display: block;
+          font-size: 12px;
+          color: #444;
+          font-weight: 500;
+          margin-bottom: 6px;
+        ">
+          Add a note (optional):
+        </label>
+        <textarea id="bookmark-note-input-existing" placeholder="Add a note about this bookmark..." style="
+          width: 100%;
+          height: 60px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          padding: 8px;
+          font-size: 13px;
+          resize: vertical;
+          font-family: inherit;
+          box-sizing: border-box;
+        "></textarea>
+        <div style="
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+        ">
+          <button id="bookmark-note-save-existing" style="
+            flex: 1;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+          ">
+            Add Note
+          </button>
+          <button id="bookmark-note-cancel-existing" style="
+            background: #f5f5f5;
+            color: #666;
+            border: 1px solid #ddd;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+          ">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Add popup to page
+  document.body.insertAdjacentHTML('beforeend', popupHTML);
+  
+  const popup = document.getElementById('bookmark-note-popup-existing');
+  const input = document.getElementById('bookmark-note-input-existing');
+  const saveBtn = document.getElementById('bookmark-note-save-existing');
+  const cancelBtn = document.getElementById('bookmark-note-cancel-existing');
+  
+  let noteSubmitted = false;
+  let autoCloseTimer;
+  
+  const closePopup = () => {
+    clearTimeout(autoCloseTimer);
+    if (popup && popup.parentNode) {
+      popup.remove();
+    }
+  };
+  
+  // Auto-close after 10 seconds if no interaction
+  const startAutoCloseTimer = () => {
+    autoCloseTimer = setTimeout(() => {
+      if (!noteSubmitted) {
+        closePopup();
+      }
+    }, 10000);
+  };
+  
+  // Reset timer on input
+  input.addEventListener('input', () => {
+    clearTimeout(autoCloseTimer);
+    startAutoCloseTimer();
+  });
+  
+  // Focus input and start timer
+  input.focus();
+  startAutoCloseTimer();
+  
+  // Save button click
+  saveBtn.addEventListener('click', () => {
+    noteSubmitted = true;
+    const note = input.value.trim();
+    closePopup();
+    
+    // Send message to background script
+    chrome.runtime.sendMessage({
+      action: 'addNoteToBookmark',
+      url: window.location.href,
+      note: note
+    });
+  });
+  
+  // Cancel button click
+  cancelBtn.addEventListener('click', () => {
+    closePopup();
+  });
+  
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closePopup();
+    }
+  }, { once: true });
+}
+
+// Function to add note to existing bookmark
+const addNoteToExistingBookmark = async (url, note) => {
+  try {
+    const result = await getFromLocalStorage('bookmarks');
+    if (!result.success || !result.data) {
+      return { success: false, error: 'No bookmarks found' };
+    }
+    
+    let bookmarks = Array.isArray(result.data) ? result.data : [result.data];
+    const bookmarkIndex = bookmarks.findIndex(bookmark => bookmark.url === url);
+    
+    if (bookmarkIndex === -1) {
+      return { success: false, error: 'Bookmark not found' };
+    }
+    
+    // Add or update the note
+    bookmarks[bookmarkIndex] = {
+      ...bookmarks[bookmarkIndex],
+      note: note,
+      noteTimestamp: new Date().toISOString()
+    };
+    
+    // Save updated bookmarks
+    await chrome.storage.local.set({ bookmarks });
+    
+    return { 
+      success: true, 
+      bookmark: bookmarks[bookmarkIndex],
+      message: note ? 'Note added successfully' : 'Note removed successfully'
+    };
+  } catch (error) {
+    console.error('Error adding note to bookmark:', error);
     return { success: false, error: error.message };
   }
 };
@@ -1028,7 +1237,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     // Ensure icon cache is ready
-    if (!cachedNormalIconPath) {
+    if (!cachedNormalIconPath || !cachedSavedIconPath) {
       await initializeIconCache();
     }
     
@@ -1045,7 +1254,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://')) {
     try {
       // Ensure icon cache is ready
-      if (!cachedNormalIconPath) {
+      if (!cachedNormalIconPath || !cachedSavedIconPath) {
         await initializeIconCache();
       }
       
@@ -1179,6 +1388,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       case 'getSettings':
         return await getFromLocalStorage('settings');
         
+      case 'addNoteToBookmark':
+        const noteResult = await addNoteToExistingBookmark(request.url, request.note);
+        
+        // Show notification
+        const settingsResult = await getFromLocalStorage('settings');
+        const showNotifications = settingsResult.data?.showNotifications !== false;
+        
+        if (showNotifications) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon48.png',
+            title: noteResult.success ? 'Note Added' : 'Error',
+            message: noteResult.success ? noteResult.message : noteResult.error
+          });
+        }
+        
+        return noteResult;
+        
       case 'updateSettings':
         return await saveToLocalStorage('settings', request.settings);
         
@@ -1196,6 +1423,31 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'saveBookmark') {
     const url = info.linkUrl || tab.url;
     const title = info.linkUrl ? info.selectionText || 'Link' : tab.title;
+    
+    // Check if bookmark already exists
+    const existsResult = await checkIfBookmarkExists(url);
+    
+    if (existsResult.exists) {
+      // Show notification that bookmark exists
+      const settingsResult = await getFromLocalStorage('settings');
+      const showNotifications = settingsResult.data?.showNotifications !== false;
+      
+      if (showNotifications) {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icons/icon48.png',
+          title: 'Bookmark Already Exists',
+          message: `"${existsResult.title}" is already saved. Use extension icon to add a note.`
+        });
+      }
+      
+      // Update icon if we're on the current tab's URL
+      if (url === tab.url) {
+        await updateIconForTab(tab.id, tab.url);
+      }
+      
+      return;
+    }
     
     const bookmarkData = createBookmarkRecord({ 
       ...tab, 
@@ -1388,21 +1640,33 @@ chrome.action.onClicked.addListener(async (tab) => {
     console.log('Bookmark exists check:', existsResult);
     
     if (existsResult.exists) {
-      // Bookmark already exists, show notification
-      const settingsResult = await getFromLocalStorage('settings');
-      const showNotifications = settingsResult.data?.showNotifications !== false;
+      // Bookmark already exists, show note input popup
+      console.log('Bookmark exists, showing note input popup');
       
-      if (showNotifications) {
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icons/icon48.png',
-          title: 'Bookmark Already Exists',
-          message: `"${existsResult.title}" is already saved.`
+      try {
+        // Inject content script to show note popup
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: showNoteInputForExistingBookmark,
+          args: [existsResult.title || 'Existing bookmark']
         });
+      } catch (error) {
+        console.error('Error showing note popup:', error);
+        
+        // Fallback: show notification only
+        const settingsResult = await getFromLocalStorage('settings');
+        const showNotifications = settingsResult.data?.showNotifications !== false;
+        
+        if (showNotifications) {
+          chrome.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon48.png',
+            title: 'Bookmark Already Exists',
+            message: `"${existsResult.title}" is already saved. Click to add a note.`
+          });
+        }
       }
       
-      // Update icon to show bookmark exists
-      await updateIconForTab(tab.id, tab.url);
       return;
     }
     

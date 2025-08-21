@@ -74,20 +74,6 @@ const createLogger = (config = {}) => {
         tailable: true
       })
     );
-    
-    // Access log file for production
-    if (nodeEnv === 'production') {
-      transports.push(
-        new winston.transports.File({
-          filename: path.join(logsDir, 'access.log'),
-          level: 'info',
-          format: logFormat,
-          maxsize: 10485760, // 10MB
-          maxFiles: 10,
-          tailable: true
-        })
-      );
-    }
   }
   
   const logger = winston.createLogger({
@@ -101,23 +87,6 @@ const createLogger = (config = {}) => {
     transports,
     exitOnError: false
   });
-  
-  // Handle uncaught exceptions and unhandled rejections
-  if (nodeEnv === 'production') {
-    logger.exceptions.handle(
-      new winston.transports.File({ 
-        filename: path.join(logsDir, 'exceptions.log'),
-        format: logFormat
-      })
-    );
-    
-    logger.rejections.handle(
-      new winston.transports.File({ 
-        filename: path.join(logsDir, 'rejections.log'),
-        format: logFormat
-      })
-    );
-  }
   
   return logger;
 };
@@ -146,4 +115,99 @@ const createRequestLogger = (logger) => {
       userAgent: req.get('User-Agent'),
       ip: req.ip,
       timestamp: new Date().toISOString()
-    });\n    \n    // Override res.json to log response\n    const originalJson = res.json;\n    res.json = function(body) {\n      const duration = Date.now() - startTime;\n      \n      // Log response\n      logger.info('Request completed', {\n        correlationId,\n        method: req.method,\n        url: req.url,\n        statusCode: res.statusCode,\n        duration: `${duration}ms`,\n        responseSize: JSON.stringify(body).length\n      });\n      \n      return originalJson.call(this, body);\n    };\n    \n    // Log response end\n    res.on('finish', () => {\n      const duration = Date.now() - startTime;\n      \n      if (!res.headersSent || res.statusCode >= 400) {\n        const logLevel = res.statusCode >= 500 ? 'error' : \n                        res.statusCode >= 400 ? 'warn' : 'info';\n        \n        logger.log(logLevel, 'Request finished', {\n          correlationId,\n          method: req.method,\n          url: req.url,\n          statusCode: res.statusCode,\n          duration: `${duration}ms`\n        });\n      }\n    });\n    \n    next();\n  };\n};\n\n// Error logging utility\nconst logError = (logger, error, context = {}) => {\n  logger.error('Application error', {\n    error: {\n      name: error.name,\n      message: error.message,\n      stack: error.stack,\n      code: error.code\n    },\n    ...context\n  });\n};\n\n// Performance logging utility\nconst logPerformance = (logger, operation, duration, metadata = {}) => {\n  const logLevel = duration > 1000 ? 'warn' : 'info';\n  \n  logger.log(logLevel, 'Performance metric', {\n    operation,\n    duration: `${duration}ms`,\n    ...metadata\n  });\n};\n\n// Database operation logging\nconst logDatabaseOperation = (logger, operation, query, params = [], duration = 0, correlationId = null) => {\n  logger.debug('Database operation', {\n    correlationId,\n    operation,\n    query: query.replace(/\\s+/g, ' ').trim(),\n    paramCount: params.length,\n    duration: duration ? `${duration}ms` : undefined\n  });\n};\n\n// Security event logging\nconst logSecurityEvent = (logger, event, details = {}, severity = 'warn') => {\n  logger.log(severity, 'Security event', {\n    event,\n    timestamp: new Date().toISOString(),\n    ...details\n  });\n};\n\n// Business event logging\nconst logBusinessEvent = (logger, event, details = {}) => {\n  logger.info('Business event', {\n    event,\n    timestamp: new Date().toISOString(),\n    ...details\n  });\n};\n\n// System health logging\nconst logSystemHealth = (logger, metrics) => {\n  logger.info('System health', {\n    timestamp: new Date().toISOString(),\n    uptime: process.uptime(),\n    memory: process.memoryUsage(),\n    ...metrics\n  });\n};\n\nmodule.exports = {\n  createLogger,\n  createRequestLogger,\n  logError,\n  logPerformance,\n  logDatabaseOperation,\n  logSecurityEvent,\n  logBusinessEvent,\n  logSystemHealth,\n  generateCorrelationId\n};
+    });
+    
+    // Log response end
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      
+      const logLevel = res.statusCode >= 500 ? 'error' : 
+                      res.statusCode >= 400 ? 'warn' : 'info';
+      
+      logger.log(logLevel, 'Request finished', {
+        correlationId,
+        method: req.method,
+        url: req.url,
+        statusCode: res.statusCode,
+        duration: `${duration}ms`
+      });
+    });
+    
+    next();
+  };
+};
+
+// Error logging utility
+const logError = (logger, error, context = {}) => {
+  logger.error('Application error', {
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    },
+    ...context
+  });
+};
+
+// Performance logging utility
+const logPerformance = (logger, operation, duration, metadata = {}) => {
+  const logLevel = duration > 1000 ? 'warn' : 'info';
+  
+  logger.log(logLevel, 'Performance metric', {
+    operation,
+    duration: `${duration}ms`,
+    ...metadata
+  });
+};
+
+// Database operation logging
+const logDatabaseOperation = (logger, operation, query, params = [], duration = 0, correlationId = null) => {
+  logger.debug('Database operation', {
+    correlationId,
+    operation,
+    query: query.replace(/\s+/g, ' ').trim(),
+    paramCount: params.length,
+    duration: duration ? `${duration}ms` : undefined
+  });
+};
+
+// Security event logging
+const logSecurityEvent = (logger, event, details = {}, severity = 'warn') => {
+  logger.log(severity, 'Security event', {
+    event,
+    timestamp: new Date().toISOString(),
+    ...details
+  });
+};
+
+// Business event logging
+const logBusinessEvent = (logger, event, details = {}) => {
+  logger.info('Business event', {
+    event,
+    timestamp: new Date().toISOString(),
+    ...details
+  });
+};
+
+// System health logging
+const logSystemHealth = (logger, metrics) => {
+  logger.info('System health', {
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    ...metrics
+  });
+};
+
+module.exports = {
+  createLogger,
+  createRequestLogger,
+  logError,
+  logPerformance,
+  logDatabaseOperation,
+  logSecurityEvent,
+  logBusinessEvent,
+  logSystemHealth,
+  generateCorrelationId
+};

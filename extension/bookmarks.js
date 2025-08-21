@@ -1,4 +1,4 @@
-// Bookmarks Page JavaScript - Functional Programming Approach
+// Bookmarks Page JavaScript - Fixed Version
 // State management
 const BookmarksState = {
   bookmarks: [],
@@ -18,9 +18,9 @@ const formatDate = (dateString) => {
   
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  if (days < 7) return days + ' days ago';
+  if (days < 30) return Math.floor(days / 7) + ' weeks ago';
+  if (days < 365) return Math.floor(days / 30) + ' months ago';
   
   return date.toLocaleDateString();
 };
@@ -35,7 +35,7 @@ const extractDomainFromUrl = (url) => {
 
 const getFaviconUrl = (url) => {
   const domain = extractDomainFromUrl(url);
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=24`;
+  return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=24';
 };
 
 const getFirstLetter = (text) => {
@@ -119,6 +119,51 @@ const applyFilters = (bookmarks, state) => {
   return sortBookmarks(filtered, state.currentSort);
 };
 
+// Demo data for web page context
+const getDemoBookmarks = () => {
+  console.log('Creating demo bookmarks...');
+  const demoData = [
+    {
+      id: 1,
+      title: 'Fei - Your Autonomous Engineering Agent - AutonomyAI',
+      url: 'https://autonomyai.io/fei/',
+      description: 'Autonomous engineering agent for development workflows',
+      favicon: 'https://autonomyai.io/favicon.ico',
+      timestamp: new Date().toISOString(),
+      tags: ['auto-captured', 'ai', 'development'],
+      syncStatus: 'demo',
+      textContent: 'Fei is an autonomous engineering agent that helps with development workflows and automation.',
+      note: 'Demo bookmark for testing'
+    },
+    {
+      id: 2,
+      title: 'Best Practices for Building Agentic AI Systems: What Actually Works in Production - UserJot',
+      url: 'https://userjot.com/blog/best-practices-building-agentic-ai-systems?utm_source=tldrai',
+      description: 'Production-ready practices for building agentic AI systems',
+      favicon: 'https://userjot.com/favicon.ico',
+      timestamp: new Date().toISOString(),
+      tags: ['ai', 'best-practices', 'production'],
+      syncStatus: 'demo',
+      textContent: 'Comprehensive guide on building agentic AI systems that actually work in production environments.',
+      note: 'Essential reading for AI development'
+    },
+    {
+      id: 3,
+      title: 'Bookmarkable - Smart Chrome Extension',
+      url: 'https://github.com/Yigal/bookmarkable',
+      description: 'Smart bookmarking Chrome extension with visual previews',
+      favicon: 'https://github.com/favicon.ico',
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
+      tags: ['development', 'github', 'extension'],
+      syncStatus: 'demo',
+      textContent: 'This is a demonstration bookmark showing how the extension displays saved pages with clean formatting and metadata.',
+      note: 'Demo bookmark for testing'
+    }
+  ];
+  console.log('Demo bookmarks created:', demoData.length);
+  return demoData;
+};
+
 // Local storage functions with sync capability
 const fetchBookmarksFromStorage = async () => {
   try {
@@ -126,6 +171,12 @@ const fetchBookmarksFromStorage = async () => {
     await attemptWebappSync();
   } catch (error) {
     console.warn('Webapp sync failed, using local data:', error.message);
+  }
+  
+  // Check if Chrome APIs are available
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    console.warn('Chrome APIs not available, returning demo bookmarks array');
+    return getDemoBookmarks();
   }
   
   return new Promise((resolve) => {
@@ -141,6 +192,12 @@ const fetchBookmarksFromStorage = async () => {
 
 // Attempt to sync with webapp and update local data
 const attemptWebappSync = async () => {
+  // Check if Chrome APIs are available
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    console.warn('Chrome APIs not available, skipping webapp sync');
+    return { success: true, synced: false };
+  }
+  
   try {
     const response = await fetch('http://localhost:3000/api/bookmarks/recent?limit=100');
     if (response.ok) {
@@ -186,60 +243,203 @@ const attemptWebappSync = async () => {
   }
 };
 
+// Text sanitization and utility functions
+const escapeHtml = (text) => {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+};
+
+const sanitizeText = (text) => {
+  if (!text) return '';
+  
+  // Remove HTML tags
+  const cleanText = text.replace(/<[^>]*>/g, '');
+  
+  // Remove control characters and normalize whitespace
+  const normalizedText = cleanText
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+  
+  // Filter out corrupted text patterns (but be less aggressive)
+  if (normalizedText.includes('\\u')) return ''; // Contains Unicode escape sequences
+  if (normalizedText.match(/^[\s\n\r]*$/)) return ''; // Only whitespace
+  if (normalizedText.match(/^['\"]{3,}$/)) return ''; // Only multiple quotes
+  if (normalizedText.includes('\'\"') && normalizedText.length < 10) return ''; // Contains corrupted quotes but only filter short strings
+  
+  return normalizedText;
+};
+
+const truncateText = (text, maxLength) => {
+  if (!text || text.length <= maxLength) return text;
+  return text.substring(0, maxLength).trim() + '...';
+};
+
+const extractDomain = (url) => {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+};
+
+const isValidUrl = (url) => {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Clean up bookmark data
+const cleanBookmarkData = (bookmark) => {
+  return {
+    ...bookmark,
+    title: sanitizeText(bookmark.title) || 'Untitled',
+    description: sanitizeText(bookmark.description),
+    textContent: sanitizeText(bookmark.textContent),
+    note: sanitizeText(bookmark.note),
+    tags: Array.isArray(bookmark.tags) 
+      ? bookmark.tags.map(tag => sanitizeText(tag)).filter(tag => tag)
+      : []
+  };
+};
+
 // UI rendering functions
 const createBookmarkCard = (bookmark) => {
   const card = document.createElement('div');
   card.className = 'bookmark-card fade-in';
   
+  // Sanitize all text content
+  const title = sanitizeText(bookmark.title) || 'Untitled';
+  const url = bookmark.url && isValidUrl(bookmark.url) ? bookmark.url : '#';
   const favicon = bookmark.favicon || getFaviconUrl(bookmark.url);
   const formattedDate = formatDate(bookmark.timestamp);
-  const tags = bookmark.tags || [];
-  const note = bookmark.note || '';
-  const textContent = bookmark.textContent || '';
+  const tags = Array.isArray(bookmark.tags) ? bookmark.tags.filter(tag => sanitizeText(tag)) : [];
+  const note = sanitizeText(bookmark.note || '');
+  const textContent = sanitizeText(bookmark.textContent || '');
   const primaryImage = bookmark.primaryImage;
   
-  // Extract domain from URL if not already present
-  const domain = bookmark.domain || (bookmark.url ? new URL(bookmark.url).hostname : '');
+  // Extract domain safely
+  const domain = extractDomain(url) || '';
   
-  // Create image section if we have a primary image
-  const imageSection = primaryImage ? `
-    <div class="bookmark-image">
-      <img src="${primaryImage}" alt="Page preview" loading="lazy" 
-           onerror="this.parentElement.style.display='none'">
-    </div>
-  ` : '';
+  // Create favicon element with proper error handling
+  const faviconElement = document.createElement('img');
+  faviconElement.src = favicon;
+  faviconElement.alt = 'Favicon';
+  faviconElement.className = 'bookmark-favicon';
+  faviconElement.onerror = function() {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'bookmark-favicon placeholder';
+    placeholder.textContent = getFirstLetter(title);
+    this.parentNode.replaceChild(placeholder, this);
+  };
   
-  // Create text preview section
-  const textPreview = textContent ? `
-    <div class="bookmark-text-preview">
-      <p>${textContent.length > 300 ? textContent.substring(0, 300) + '...' : textContent}</p>
-    </div>
-  ` : '';
+  // Create the card header
+  const header = document.createElement('div');
+  header.className = 'bookmark-header';
   
-  card.innerHTML = `
-    <div class="bookmark-header">
-      <img src="${favicon}" alt="Favicon" class="bookmark-favicon" 
-           onerror="this.outerHTML='<div class=\\"bookmark-favicon placeholder\\">${getFirstLetter(bookmark.title)}</div>'">
-      <div class="bookmark-info">
-        <h3 class="bookmark-title" title="${bookmark.title}">${bookmark.title} ${bookmark.syncStatus === 'synced' ? '☁️' : bookmark.syncStatus === 'pending' ? '⏳' : '💾'}</h3>
-        <p class="bookmark-domain">${domain}</p>
-        <p class="bookmark-url" title="${bookmark.url}">${bookmark.url}</p>
-      </div>
-    </div>
-    ${imageSection}
-    ${textPreview}
-    ${note ? `<div class="bookmark-note" title="${note}">${note}</div>` : ''}
-    <div class="bookmark-date">${formattedDate}</div>
-    ${tags.length > 0 ? `
-      <div class="bookmark-tags">
-        ${tags.map(tag => `<span class="bookmark-tag ${tag === 'bulk-save' ? 'bulk-save' : ''}">${tag}</span>`).join('')}
-      </div>
-    ` : ''}
-    <div class="bookmark-actions">
-      <button class="action-btn visit" onclick="window.open('${bookmark.url}', '_blank')">Visit</button>
-      <button class="action-btn copy" onclick="copyToClipboard('${bookmark.url}')">Copy URL</button>
-    </div>
-  `;
+  const bookmarkInfo = document.createElement('div');
+  bookmarkInfo.className = 'bookmark-info';
+  
+  const titleElement = document.createElement('h3');
+  titleElement.className = 'bookmark-title';
+  titleElement.title = title;
+  const statusIcon = bookmark.syncStatus === 'synced' ? '☁️' : bookmark.syncStatus === 'pending' ? '⏳' : bookmark.syncStatus === 'demo' ? '🎯' : '💾';
+  titleElement.textContent = title + ' ' + statusIcon;
+  
+  const domainElement = document.createElement('p');
+  domainElement.className = 'bookmark-domain';
+  domainElement.textContent = domain;
+  
+  const urlElement = document.createElement('p');
+  urlElement.className = 'bookmark-url';
+  urlElement.title = url;
+  urlElement.textContent = url;
+  
+  bookmarkInfo.appendChild(titleElement);
+  bookmarkInfo.appendChild(domainElement);
+  bookmarkInfo.appendChild(urlElement);
+  
+  header.appendChild(faviconElement);
+  header.appendChild(bookmarkInfo);
+  
+  card.appendChild(header);
+  
+  // Add image section if available
+  if (primaryImage) {
+    const imageDiv = document.createElement('div');
+    imageDiv.className = 'bookmark-image';
+    const img = document.createElement('img');
+    img.src = primaryImage;
+    img.alt = 'Page preview';
+    img.loading = 'lazy';
+    img.onerror = function() {
+      this.parentElement.style.display = 'none';
+    };
+    imageDiv.appendChild(img);
+    card.appendChild(imageDiv);
+  }
+  
+  // Add text preview if available
+  if (textContent) {
+    const textDiv = document.createElement('div');
+    textDiv.className = 'bookmark-text-preview';
+    const textP = document.createElement('p');
+    textP.textContent = truncateText(textContent, 300);
+    textDiv.appendChild(textP);
+    card.appendChild(textDiv);
+  }
+  
+  // Add note if available
+  if (note) {
+    const noteDiv = document.createElement('div');
+    noteDiv.className = 'bookmark-note';
+    noteDiv.title = note;
+    noteDiv.textContent = note;
+    card.appendChild(noteDiv);
+  }
+  
+  // Add date
+  const dateDiv = document.createElement('div');
+  dateDiv.className = 'bookmark-date';
+  dateDiv.textContent = formattedDate;
+  card.appendChild(dateDiv);
+  
+  // Add tags if available
+  if (tags.length > 0) {
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'bookmark-tags';
+    tags.forEach(tag => {
+      const tagSpan = document.createElement('span');
+      tagSpan.className = 'bookmark-tag' + (tag === 'bulk-save' ? ' bulk-save' : '');
+      tagSpan.textContent = tag;
+      tagsDiv.appendChild(tagSpan);
+    });
+    card.appendChild(tagsDiv);
+  }
+  
+  // Add actions
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'bookmark-actions';
+  
+  const visitBtn = document.createElement('button');
+  visitBtn.className = 'action-btn visit';
+  visitBtn.textContent = 'Visit';
+  visitBtn.onclick = () => window.open(url, '_blank');
+  
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'action-btn copy';
+  copyBtn.textContent = 'Copy URL';
+  copyBtn.onclick = () => copyToClipboard(url);
+  
+  actionsDiv.appendChild(visitBtn);
+  actionsDiv.appendChild(copyBtn);
+  card.appendChild(actionsDiv);
   
   return card;
 };
@@ -322,10 +522,28 @@ const loadBookmarks = async () => {
   
   try {
     // Load from local storage
-    const bookmarks = await fetchBookmarksFromStorage();
-    console.log('Loaded bookmarks from local storage:', bookmarks.length);
+    const rawBookmarks = await fetchBookmarksFromStorage();
+    console.log('Loaded bookmarks from storage:', rawBookmarks.length);
+    
+    if (rawBookmarks.length === 0) {
+      console.log('No bookmarks found');
+      showEmptyState();
+      return;
+    }
+    
+    // Clean up corrupted bookmark data, but preserve demo bookmarks
+    const bookmarks = rawBookmarks.map(bookmark => {
+      // Don't over-sanitize demo bookmarks
+      if (bookmark.syncStatus === 'demo') {
+        return bookmark;
+      }
+      return cleanBookmarkData(bookmark);
+    }).filter(bookmark => bookmark.title && bookmark.title.trim() !== '');
+    
+    console.log('Cleaned bookmarks:', bookmarks.length);
     
     if (bookmarks.length === 0) {
+      console.log('All bookmarks were filtered out');
       showEmptyState();
       return;
     }
@@ -338,11 +556,34 @@ const loadBookmarks = async () => {
     renderBookmarksGrid(BookmarksState.filteredBookmarks);
     showBookmarksContainer();
     
-    console.log(`Bookmarks loaded from local storage: ${bookmarks.length} items`);
+    console.log('Bookmarks loaded successfully:', bookmarks.length, 'items');
     
   } catch (error) {
     console.error('Error loading bookmarks:', error);
-    showErrorState('Unable to load bookmarks. Please try again later.');
+    
+    // Provide different error messages based on context
+    if (typeof chrome === 'undefined') {
+      // For web page context, try to show demo bookmarks anyway
+      try {
+        console.log('Attempting to load demo bookmarks as fallback...');
+        const demoBookmarks = getDemoBookmarks();
+        BookmarksState.bookmarks = demoBookmarks;
+        BookmarksState.filteredBookmarks = applyFilters(demoBookmarks, BookmarksState);
+        
+        updateStats(demoBookmarks);
+        renderTagsList(getAllTags(demoBookmarks));
+        renderBookmarksGrid(BookmarksState.filteredBookmarks);
+        showBookmarksContainer();
+        
+        console.log('Demo bookmarks loaded as fallback');
+        return;
+      } catch (demoError) {
+        console.error('Even demo bookmarks failed:', demoError);
+        showErrorState('Demo mode: Unable to load demo bookmarks. This is a preview interface.');
+      }
+    } else {
+      showErrorState('Unable to load bookmarks. Please try again later.');
+    }
   }
 };
 
@@ -404,116 +645,47 @@ const applyFiltersAndRender = () => {
   renderBookmarksGrid(BookmarksState.filteredBookmarks);
 };
 
-const exportBookmarks = () => {
-  const dataStr = JSON.stringify(BookmarksState.bookmarks, null, 2);
-  const dataBlob = new Blob([dataStr], {type: 'application/json'});
-  
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(dataBlob);
-  link.download = `bookmarks-export-${new Date().toISOString().split('T')[0]}.json`;
-  link.click();
-};
-
-const showClearOptions = () => {
-  const clearOptions = [
-    { id: 'today', label: 'Clear Today', description: 'Remove bookmarks from today' },
-    { id: 'week', label: 'Clear This Week', description: 'Remove bookmarks from this week' },
-    { id: 'month', label: 'Clear This Month', description: 'Remove bookmarks from this month' },
-    { id: 'all', label: 'Clear All', description: 'Remove all bookmarks' }
-  ];
-  
-  // Create modal overlay
-  const modal = document.createElement('div');
-  modal.className = 'clear-modal-overlay';
-  modal.innerHTML = `
-    <div class="clear-modal">
-      <h3>Clear Bookmarks</h3>
-      <p>Choose what you want to clear:</p>
-      <div class="clear-options">
-        ${clearOptions.map(option => `
-          <div class="clear-option" data-filter="${option.id}">
-            <div class="clear-option-header">
-              <span class="clear-option-label">${option.label}</span>
-              <span class="clear-option-description">${option.description}</span>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-      <div class="clear-modal-actions">
-        <button class="control-btn" id="cancel-clear">Cancel</button>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  
-  // Add event listeners
-  modal.querySelectorAll('.clear-option').forEach(option => {
-    option.addEventListener('click', async () => {
-      const filter = option.dataset.filter;
-      const confirmed = confirm(`Are you sure you want to ${filter === 'all' ? 'clear all bookmarks' : `clear bookmarks from ${filter}`}? This action cannot be undone.`);
-      
-      if (confirmed) {
-        try {
-          const result = await chrome.runtime.sendMessage({
-            action: 'clearBookmarks',
-            timeFilter: filter
-          });
-          
-          if (result.success) {
-            alert(`Successfully cleared ${result.cleared} bookmarks. ${result.remaining} bookmarks remaining.`);
-            // Refresh the bookmarks display
-            loadBookmarks();
-          } else {
-            alert(`Error clearing bookmarks: ${result.error}`);
-          }
-        } catch (error) {
-          alert(`Error: ${error.message}`);
-        }
-        
-        // Remove modal
-        document.body.removeChild(modal);
-      }
-    });
-  });
-  
-  // Cancel button
-  modal.querySelector('#cancel-clear').addEventListener('click', () => {
-    document.body.removeChild(modal);
-  });
-};
-
 // Utility functions
-const copyToClipboard = (text) => {
-  navigator.clipboard.writeText(text).then(() => {
-    // Could show a toast notification here
-    console.log('URL copied to clipboard');
-  });
+const copyToClipboard = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    console.log('Copied to clipboard:', text);
+  } catch (err) {
+    console.error('Failed to copy text: ', err);
+  }
 };
 
-// Initialize the page
+// Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-  // Bind event listeners
-  document.getElementById('search-input').addEventListener('input', handleSearch);
-  document.getElementById('search-btn').addEventListener('click', handleSearch);
-  document.getElementById('sort-select').addEventListener('change', handleSortChange);
-  document.getElementById('filter-select').addEventListener('change', handleFilterChange);
-  document.getElementById('refresh-btn').addEventListener('click', loadBookmarks);
-  document.getElementById('export-btn').addEventListener('click', exportBookmarks);
-  document.getElementById('clear-btn').addEventListener('click', showClearOptions);
-  document.getElementById('retry-btn').addEventListener('click', loadBookmarks);
-  document.getElementById('clear-search').addEventListener('click', clearAllFilters);
-  
-  // Handle Enter key in search
-  document.getElementById('search-input').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  });
-  
-  // Load bookmarks on page load
+  console.log('DOM loaded, initializing bookmarks...');
   loadBookmarks();
+  
+  // Set up event listeners
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', handleSearch);
+  }
+  
+  const sortSelect = document.getElementById('sort-select');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', handleSortChange);
+  }
+  
+  const filterSelect = document.getElementById('filter-select');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', handleFilterChange);
+  }
+  
+  const retryBtn = document.getElementById('retry-btn');
+  if (retryBtn) {
+    retryBtn.addEventListener('click', loadBookmarks);
+  }
+  
+  const clearFiltersBtn = document.getElementById('clear-filters');
+  if (clearFiltersBtn) {
+    clearFiltersBtn.addEventListener('click', clearAllFilters);
+  }
 });
 
-// Make functions available globally for HTML onclick handlers
+// Make utility functions globally available
 window.copyToClipboard = copyToClipboard;
