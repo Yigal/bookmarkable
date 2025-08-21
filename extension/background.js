@@ -121,7 +121,10 @@ const updateIconForTab = async (tabId, url) => {
     return;
   }
   
+  console.log('Updating icon for tab:', tabId, 'URL:', url);
+  
   const checkResult = await checkIfBookmarkExists(url);
+  console.log('Bookmark exists check result:', checkResult);
   
   try {
     // Use appropriate icon based on bookmark status
@@ -129,11 +132,14 @@ const updateIconForTab = async (tabId, url) => {
       ? cachedSavedIconPath 
       : cachedNormalIconPath;
     
+    console.log('Setting icon path:', iconPath, 'for bookmark exists:', checkResult.exists);
+    
     if (iconPath) {
       await chrome.action.setIcon({
         tabId: tabId,
         path: iconPath
       });
+      console.log('Icon set successfully for tab:', tabId);
     }
     
     // Update the title to show bookmark status
@@ -156,11 +162,13 @@ const updateIconForTab = async (tabId, url) => {
         tabId: tabId,
         color: "#4CAF50"
       });
+      console.log('Badge set for bookmarked page');
     } else {
       await chrome.action.setBadgeText({
         tabId: tabId,
         text: ""
       });
+      console.log('Badge cleared for unbookmarked page');
     }
   } catch (error) {
     console.error('Error updating icon:', error);
@@ -211,6 +219,22 @@ const saveBookmarkLocally = async (bookmarkData) => {
     // Save to main bookmarks storage
     const result = await saveToLocalStorage('bookmarks', cleanBookmarkData);
     console.log('Bookmark saved locally successfully:', result);
+    
+    // Update icon for all tabs with this URL immediately
+    if (result.success) {
+      console.log('Updating icons for all tabs after bookmark save');
+      try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.url === bookmarkData.url) {
+            console.log('Found matching tab, updating icon:', tab.id);
+            await updateIconForTab(tab.id, tab.url);
+          }
+        }
+      } catch (error) {
+        console.error('Error updating icons after save:', error);
+      }
+    }
     return { success: true, data: result.data };
   } catch (error) {
     console.error('Error saving bookmark locally:', error);
@@ -464,6 +488,20 @@ const addNoteToExistingBookmark = async (url, note) => {
     // Save updated bookmarks
     await chrome.storage.local.set({ bookmarks });
     
+    // Update icon for all tabs with this URL immediately
+    console.log('Note added, updating icons for all tabs with URL:', url);
+    try {
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.url === url) {
+          console.log('Found matching tab for note update, updating icon:', tab.id);
+          await updateIconForTab(tab.id, tab.url);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating icons after note add:', error);
+    }
+    
     return { 
       success: true, 
       bookmark: bookmarks[bookmarkIndex],
@@ -472,6 +510,25 @@ const addNoteToExistingBookmark = async (url, note) => {
   } catch (error) {
     console.error('Error adding note to bookmark:', error);
     return { success: false, error: error.message };
+  }
+};
+
+// Force refresh icon for active tab
+const forceRefreshActiveTabIcon = async () => {
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab && activeTab.url && !activeTab.url.startsWith('chrome://')) {
+      console.log('Force refreshing icon for active tab:', activeTab.id);
+      
+      // Ensure icon cache is ready
+      if (!cachedNormalIconPath || !cachedSavedIconPath) {
+        await initializeIconCache();
+      }
+      
+      await updateIconForTab(activeTab.id, activeTab.url);
+    }
+  } catch (error) {
+    console.error('Error force refreshing active tab icon:', error);
   }
 };
 
@@ -1233,6 +1290,30 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 });
 
+// Add window focus listener for immediate icon updates
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    return; // No window focused
+  }
+  
+  try {
+    // Get the active tab in the focused window
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId: windowId });
+    if (activeTab && activeTab.url && !activeTab.url.startsWith('chrome://')) {
+      console.log('Window focused, updating icon for active tab:', activeTab.id);
+      
+      // Ensure icon cache is ready
+      if (!cachedNormalIconPath || !cachedSavedIconPath) {
+        await initializeIconCache();
+      }
+      
+      await updateIconForTab(activeTab.id, activeTab.url);
+    }
+  } catch (error) {
+    console.error('Error handling window focus change:', error);
+  }
+});
+
 // Tab change listeners to update icon based on bookmark status
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
@@ -1711,7 +1792,38 @@ setInterval(async () => {
     if (countResult.success) {
       console.log(`Current bookmarks count: ${countResult.count}`);
     }
+    
+    // Force refresh active tab icon periodically to ensure it's up to date
+    await forceRefreshActiveTabIcon();
   } catch (error) {
     console.error('Error in periodic maintenance:', error);
   }
 }, 300000); // Check every 5 minutes
+
+// More frequent icon refresh
+setInterval(async () => {
+  try {
+    await forceRefreshActiveTabIcon();
+  } catch (error) {
+    console.error('Error in icon refresh:', error);
+  }
+}, 10000); // Refresh every 10 seconds
+
+// Listen for storage changes to update icons immediately
+chrome.storage.onChanged.addListener(async (changes, namespace) => {
+  if (namespace === 'local' && changes.bookmarks) {
+    console.log('Bookmarks storage changed, refreshing all tab icons');
+    
+    try {
+      // Update icons for all tabs
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.url && !tab.url.startsWith('chrome://')) {
+          await updateIconForTab(tab.id, tab.url);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating icons after storage change:', error);
+    }
+  }
+});
